@@ -1,0 +1,28 @@
+tasks:
+  installDeps:
+    name: Install dependencies
+    description: Install npm dependencies for the catalog service.
+    command: |
+      npm install
+    triggeredBy:
+      - postDevcontainerStart
+
+  test:
+    name: Run tests
+    description: Run the test suite.
+    command: |
+      npm test
+    triggeredBy:
+      - manual
+    dependsOn:
+      - installDeps
+
+services:
+  dev-server:
+    name: Dev Server
+    description: Run the catalog service with nodemon for live reload.
+    commands:
+      start: |
+        npm run dev
+      ready: |
+        curl -f http://localhost:3003/health

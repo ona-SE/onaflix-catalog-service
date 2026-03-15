@@ -1,0 +1,11 @@
+{
+  "name": "onaflix-catalog-service",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:20",
+  "forwardPorts": [3003],
+  "portsAttributes": {
+    "3003": {
+      "label": "Catalog Service",
+      "onAutoForward": "notify"
+    }
+  }
+}
