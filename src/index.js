@@ -1,7 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const bodyParser = require('body-parser');
-const url = require('url');
 require('dotenv').config();
 
 const movieRoutes = require('./routes/movies');
@@ -11,11 +9,10 @@ const app = express();
 const PORT = process.env.PORT || 3003;
 
 app.use(cors());
-app.use(bodyParser.json());
+app.use(express.json());
 
-// Deprecated: url.parse
 app.use((req, res, next) => {
-  const parsed = url.parse(req.url, true);
+  const parsed = new URL(req.url, `http://${req.headers.host}`);
   req.pathname = parsed.pathname;
   next();
 });
