@@ -1,7 +1,6 @@
 const express = require('express');
 const _ = require('lodash');
 const querystring = require('querystring');
-const rp = require('request-promise');
 
 const router = express.Router();
 
@@ -49,7 +48,6 @@ router.get('/:id', (req, res) => {
   res.json(movie);
 });
 
-// Deprecated: request-promise (should use fetch or axios)
 router.get('/:id/recommendations', async (req, res) => {
   const movie = _.find(movies, { id: parseInt(req.params.id) });
   if (!movie) {
@@ -58,11 +56,14 @@ router.get('/:id/recommendations', async (req, res) => {
 
   try {
     const recommendationUrl = process.env.RECOMMENDATION_SERVICE_URL || 'http://localhost:3005';
-    const recommendations = await rp({
-      uri: `${recommendationUrl}/api/recommend`,
-      qs: { genre: movie.genre, excludeId: movie.id },
-      json: true,
+    const params = new URLSearchParams({ genre: movie.genre, excludeId: movie.id });
+    const response = await fetch(`${recommendationUrl}/api/recommend?${params}`, {
+      redirect: 'error',
     });
+    if (!response.ok) {
+      throw new Error(`Recommendation service returned ${response.status}`);
+    }
+    const recommendations = await response.json();
     res.json(recommendations);
   } catch (err) {
     // Fallback: return same-genre movies
