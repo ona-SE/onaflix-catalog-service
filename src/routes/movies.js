@@ -1,7 +1,7 @@
 const express = require('express');
 const _ = require('lodash');
 const querystring = require('querystring');
-const rp = require('request-promise');
+const fetch = require('node-fetch');
 
 const router = express.Router();
 
@@ -58,11 +58,11 @@ router.get('/:id/recommendations', async (req, res) => {
 
   try {
     const recommendationUrl = process.env.RECOMMENDATION_SERVICE_URL || 'http://localhost:3005';
-    const recommendations = await rp({
-      uri: `${recommendationUrl}/api/recommend`,
-      qs: { genre: movie.genre, excludeId: movie.id },
-      json: true,
+    const qs = querystring.stringify({ genre: movie.genre, excludeId: movie.id });
+    const response = await fetch(`${recommendationUrl}/api/recommend?${qs}`, {
+      redirect: 'error',
     });
+    const recommendations = await response.json();
     res.json(recommendations);
   } catch (err) {
     // Fallback: return same-genre movies
