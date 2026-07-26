@@ -1,7 +1,7 @@
 const express = require('express');
 const _ = require('lodash');
 const querystring = require('querystring');
-const rp = require('request-promise');
+const axios = require('axios');
 
 const router = express.Router();
 
@@ -49,7 +49,6 @@ router.get('/:id', (req, res) => {
   res.json(movie);
 });
 
-// Deprecated: request-promise (should use fetch or axios)
 router.get('/:id/recommendations', async (req, res) => {
   const movie = _.find(movies, { id: parseInt(req.params.id) });
   if (!movie) {
@@ -58,12 +57,10 @@ router.get('/:id/recommendations', async (req, res) => {
 
   try {
     const recommendationUrl = process.env.RECOMMENDATION_SERVICE_URL || 'http://localhost:3005';
-    const recommendations = await rp({
-      uri: `${recommendationUrl}/api/recommend`,
-      qs: { genre: movie.genre, excludeId: movie.id },
-      json: true,
+    const response = await axios.get(`${recommendationUrl}/api/recommend`, {
+      params: { genre: movie.genre, excludeId: movie.id },
     });
-    res.json(recommendations);
+    res.json(response.data);
   } catch (err) {
     // Fallback: return same-genre movies
     const sameGenre = movies.filter(m => m.genre === movie.genre && m.id !== movie.id);
