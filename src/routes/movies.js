@@ -1,9 +1,42 @@
 const express = require('express');
 const _ = require('lodash');
 const querystring = require('querystring');
-const rp = require('request-promise');
+const http = require('http');
+const https = require('https');
+const { URL } = require('url');
 
 const router = express.Router();
+
+// Minimal JSON GET helper (replaces deprecated request-promise, CVE-2023-28155).
+// Rejects on non-2xx to preserve the previous simple:true behavior so callers
+// keep their existing fallback path.
+function getJson(baseUrl, query) {
+  return new Promise((resolve, reject) => {
+    const target = new URL(baseUrl);
+    for (const [key, value] of Object.entries(query || {})) {
+      target.searchParams.set(key, value);
+    }
+
+    const client = target.protocol === 'https:' ? https : http;
+    const req = client.get(target, (res) => {
+      let data = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          return reject(new Error(`Request failed with status ${res.statusCode}`));
+        }
+        try {
+          resolve(data ? JSON.parse(data) : {});
+        } catch (err) {
+          reject(err);
+        }
+      });
+    });
+
+    req.on('error', reject);
+  });
+}
 
 // In-memory movie store (demo)
 let movies = [
@@ -49,7 +82,6 @@ router.get('/:id', (req, res) => {
   res.json(movie);
 });
 
-// Deprecated: request-promise (should use fetch or axios)
 router.get('/:id/recommendations', async (req, res) => {
   const movie = _.find(movies, { id: parseInt(req.params.id) });
   if (!movie) {
@@ -58,10 +90,9 @@ router.get('/:id/recommendations', async (req, res) => {
 
   try {
     const recommendationUrl = process.env.RECOMMENDATION_SERVICE_URL || 'http://localhost:3005';
-    const recommendations = await rp({
-      uri: `${recommendationUrl}/api/recommend`,
-      qs: { genre: movie.genre, excludeId: movie.id },
-      json: true,
+    const recommendations = await getJson(`${recommendationUrl}/api/recommend`, {
+      genre: movie.genre,
+      excludeId: movie.id,
     });
     res.json(recommendations);
   } catch (err) {
