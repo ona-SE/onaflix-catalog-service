@@ -11,30 +11,38 @@ const router = express.Router();
 // Rejects on non-2xx to preserve the previous simple:true behavior so callers
 // keep their existing fallback path.
 function getJson(baseUrl, query) {
-  return new Promise((resolve, reject) => {
-    const target = new URL(baseUrl);
-    for (const [key, value] of Object.entries(query || {})) {
-      target.searchParams.set(key, value);
-    }
+  const target = new URL(baseUrl);
+  for (const [key, value] of Object.entries(query || {})) {
+    target.searchParams.set(key, value);
+  }
 
-    const client = target.protocol === 'https:' ? https : http;
-    const req = client.get(target, (res) => {
-      let data = '';
-      res.setEncoding('utf8');
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
-        if (res.statusCode < 200 || res.statusCode >= 300) {
-          return reject(new Error(`Request failed with status ${res.statusCode}`));
+  const client = target.protocol === 'https:' ? https : http;
+
+  return new Promise((resolve, reject) => {
+    const request = client.get(target, { headers: { Accept: 'application/json' } }, response => {
+      let body = '';
+      response.setEncoding('utf8');
+      response.on('data', chunk => {
+        body += chunk;
+      });
+      response.on('end', () => {
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          reject(new Error(`Recommendation service returned ${response.statusCode}`));
+          return;
         }
+
         try {
-          resolve(data ? JSON.parse(data) : {});
+          resolve(body ? JSON.parse(body) : {});
         } catch (err) {
           reject(err);
         }
       });
     });
 
-    req.on('error', reject);
+    request.setTimeout(5000, () => {
+      request.destroy(new Error('Recommendation service request timed out'));
+    });
+    request.on('error', reject);
   });
 }
 
@@ -89,8 +97,9 @@ router.get('/:id/recommendations', async (req, res) => {
   }
 
   try {
-    const recommendationUrl = process.env.RECOMMENDATION_SERVICE_URL || 'http://localhost:3005';
-    const recommendations = await getJson(`${recommendationUrl}/api/recommend`, {
+    const recommendationServiceUrl = process.env.RECOMMENDATION_SERVICE_URL || 'http://localhost:3005';
+    const recommendationUrl = `${recommendationServiceUrl.replace(/\/$/, '')}/api/recommend`;
+    const recommendations = await getJson(recommendationUrl, {
       genre: movie.genre,
       excludeId: movie.id,
     });

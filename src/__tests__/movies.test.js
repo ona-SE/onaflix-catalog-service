@@ -1,4 +1,5 @@
 const request = require('supertest');
+const http = require('http');
 const app = require('../index');
 
 describe('Catalog Service', () => {
@@ -37,6 +38,62 @@ describe('Catalog Service', () => {
     it('returns 404 for missing movie', async () => {
       const res = await request(app).get('/api/movies/999');
       expect(res.status).toBe(404);
+    });
+  });
+
+  describe('GET /api/movies/:id/recommendations', () => {
+    it('returns recommendations from the recommendation service', async () => {
+      const recommendationServer = http.createServer((req, res) => {
+        const requestUrl = new URL(req.url, 'http://localhost');
+        expect(requestUrl.pathname).toBe('/api/recommend');
+        expect(requestUrl.searchParams.get('genre')).toBe('Drama');
+        expect(requestUrl.searchParams.get('excludeId')).toBe('1');
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ recommendations: [{ id: 6, title: 'The Green Mile' }] }));
+      });
+
+      await new Promise(resolve => recommendationServer.listen(0, '127.0.0.1', resolve));
+      const address = recommendationServer.address();
+      process.env.RECOMMENDATION_SERVICE_URL = `http://127.0.0.1:${address.port}`;
+
+      try {
+        const res = await request(app).get('/api/movies/1/recommendations');
+        expect(res.status).toBe(200);
+        expect(res.body.recommendations[0].title).toBe('The Green Mile');
+      } finally {
+        delete process.env.RECOMMENDATION_SERVICE_URL;
+        await new Promise(resolve => recommendationServer.close(resolve));
+      }
+    });
+
+    it('does not follow recommendation service redirects', async () => {
+      let redirectTargetCalled = false;
+      const redirectTarget = http.createServer((req, res) => {
+        redirectTargetCalled = true;
+        res.end(JSON.stringify({ recommendations: [] }));
+      });
+      await new Promise(resolve => redirectTarget.listen(0, '127.0.0.1', resolve));
+
+      const redirectTargetAddress = redirectTarget.address();
+      const recommendationServer = http.createServer((req, res) => {
+        res.statusCode = 302;
+        res.setHeader('Location', `http://127.0.0.1:${redirectTargetAddress.port}/redirected`);
+        res.end();
+      });
+      await new Promise(resolve => recommendationServer.listen(0, '127.0.0.1', resolve));
+
+      const recommendationAddress = recommendationServer.address();
+      process.env.RECOMMENDATION_SERVICE_URL = `http://127.0.0.1:${recommendationAddress.port}`;
+
+      try {
+        const res = await request(app).get('/api/movies/1/recommendations');
+        expect(res.status).toBe(200);
+        expect(redirectTargetCalled).toBe(false);
+      } finally {
+        delete process.env.RECOMMENDATION_SERVICE_URL;
+        await new Promise(resolve => recommendationServer.close(resolve));
+        await new Promise(resolve => redirectTarget.close(resolve));
+      }
     });
   });
 
