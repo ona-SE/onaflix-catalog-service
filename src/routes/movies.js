@@ -1,50 +1,9 @@
 const express = require('express');
 const _ = require('lodash');
 const querystring = require('querystring');
-const http = require('http');
-const https = require('https');
-const { URL } = require('url');
+const axios = require('axios');
 
 const router = express.Router();
-
-// Minimal JSON GET helper (replaces deprecated request-promise, CVE-2023-28155).
-// Rejects on non-2xx to preserve the previous simple:true behavior so callers
-// keep their existing fallback path.
-function getJson(baseUrl, query) {
-  const target = new URL(baseUrl);
-  for (const [key, value] of Object.entries(query || {})) {
-    target.searchParams.set(key, value);
-  }
-
-  const client = target.protocol === 'https:' ? https : http;
-
-  return new Promise((resolve, reject) => {
-    const request = client.get(target, { headers: { Accept: 'application/json' } }, response => {
-      let body = '';
-      response.setEncoding('utf8');
-      response.on('data', chunk => {
-        body += chunk;
-      });
-      response.on('end', () => {
-        if (response.statusCode < 200 || response.statusCode >= 300) {
-          reject(new Error(`Recommendation service returned ${response.statusCode}`));
-          return;
-        }
-
-        try {
-          resolve(body ? JSON.parse(body) : {});
-        } catch (err) {
-          reject(err);
-        }
-      });
-    });
-
-    request.setTimeout(5000, () => {
-      request.destroy(new Error('Recommendation service request timed out'));
-    });
-    request.on('error', reject);
-  });
-}
 
 // In-memory movie store (demo)
 let movies = [
@@ -97,13 +56,12 @@ router.get('/:id/recommendations', async (req, res) => {
   }
 
   try {
-    const recommendationServiceUrl = process.env.RECOMMENDATION_SERVICE_URL || 'http://localhost:3005';
-    const recommendationUrl = `${recommendationServiceUrl.replace(/\/$/, '')}/api/recommend`;
-    const recommendations = await getJson(recommendationUrl, {
-      genre: movie.genre,
-      excludeId: movie.id,
+    const recommendationUrl = process.env.RECOMMENDATION_SERVICE_URL || 'http://localhost:3005';
+    const response = await axios.get(`${recommendationUrl.replace(/\/$/, '')}/api/recommend`, {
+      params: { genre: movie.genre, excludeId: movie.id },
+      maxRedirects: 0,
     });
-    res.json(recommendations);
+    res.json(response.data);
   } catch (err) {
     // Fallback: return same-genre movies
     const sameGenre = movies.filter(m => m.genre === movie.genre && m.id !== movie.id);
