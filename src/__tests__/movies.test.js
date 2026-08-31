@@ -40,6 +40,39 @@ describe('Catalog Service', () => {
     });
   });
 
+  describe('GET /api/movies/:id/recommendations', () => {
+    const originalFetch = global.fetch;
+
+    afterEach(() => {
+      global.fetch = originalFetch;
+    });
+
+    it('returns recommendations from the recommendation service', async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: jest.fn().mockResolvedValue({ recommendations: [{ id: 3 }] }),
+      });
+
+      const res = await request(app).get('/api/movies/1/recommendations');
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ recommendations: [{ id: 3 }] });
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:3005/api/recommend?genre=Drama&excludeId=1'
+      );
+    });
+  });
+
+  describe('GET /api/movies/export/csv', () => {
+    it('exports the catalog as CSV', async () => {
+      const res = await request(app).get('/api/movies/export/csv');
+
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toMatch(/text\/csv/);
+      expect(res.text).toContain('id,title,year,rating,genre,director');
+    });
+  });
+
   describe('POST /api/movies', () => {
     it('creates a new movie', async () => {
       const res = await request(app)
