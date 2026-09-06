@@ -1,9 +1,52 @@
 const express = require('express');
+const http = require('http');
+const https = require('https');
 const _ = require('lodash');
 const querystring = require('querystring');
-const rp = require('request-promise');
 
 const router = express.Router();
+
+const getJson = targetUrl => new Promise((resolve, reject) => {
+  const client = targetUrl.protocol === 'https:'
+    ? https
+    : targetUrl.protocol === 'http:'
+      ? http
+      : null;
+
+  if (!client) {
+    reject(new Error(`Unsupported protocol: ${targetUrl.protocol}`));
+    return;
+  }
+
+  const outboundRequest = client.get(targetUrl, response => {
+    if (response.statusCode >= 300 && response.statusCode < 400) {
+      response.resume();
+      reject(new Error('Recommendation service redirects are not allowed'));
+      return;
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      response.resume();
+      reject(new Error(`Recommendation service returned ${response.statusCode}`));
+      return;
+    }
+
+    response.setEncoding('utf8');
+    let body = '';
+    response.on('data', chunk => {
+      body += chunk;
+    });
+    response.on('end', () => {
+      try {
+        resolve(JSON.parse(body));
+      } catch (err) {
+        reject(err);
+      }
+    });
+  });
+
+  outboundRequest.on('error', reject);
+});
 
 // In-memory movie store (demo)
 let movies = [
@@ -49,7 +92,6 @@ router.get('/:id', (req, res) => {
   res.json(movie);
 });
 
-// Deprecated: request-promise (should use fetch or axios)
 router.get('/:id/recommendations', async (req, res) => {
   const movie = _.find(movies, { id: parseInt(req.params.id) });
   if (!movie) {
@@ -57,12 +99,11 @@ router.get('/:id/recommendations', async (req, res) => {
   }
 
   try {
-    const recommendationUrl = process.env.RECOMMENDATION_SERVICE_URL || 'http://localhost:3005';
-    const recommendations = await rp({
-      uri: `${recommendationUrl}/api/recommend`,
-      qs: { genre: movie.genre, excludeId: movie.id },
-      json: true,
-    });
+    const recommendationBaseUrl = process.env.RECOMMENDATION_SERVICE_URL || 'http://localhost:3005';
+    const recommendationUrl = new URL('/api/recommend', recommendationBaseUrl);
+    recommendationUrl.searchParams.set('genre', movie.genre);
+    recommendationUrl.searchParams.set('excludeId', movie.id);
+    const recommendations = await getJson(recommendationUrl);
     res.json(recommendations);
   } catch (err) {
     // Fallback: return same-genre movies
