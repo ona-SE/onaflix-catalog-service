@@ -40,6 +40,36 @@ describe('Catalog Service', () => {
     });
   });
 
+  describe('GET /api/movies/:id/recommendations', () => {
+    it('returns recommendations from the recommendation service', async () => {
+      const recommendations = [{ id: 5, title: 'Fight Club' }];
+      const originalFetch = global.fetch;
+      const fetchMock = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ recommendations }),
+      });
+      global.fetch = fetchMock;
+
+      const res = await request(app).get('/api/movies/1/recommendations');
+
+      expect(res.status).toBe(200);
+      expect(res.body.recommendations).toEqual(recommendations);
+      expect(fetchMock).toHaveBeenCalledWith(expect.any(URL));
+      global.fetch = originalFetch;
+    });
+  });
+
+  describe('GET /api/movies/export/csv', () => {
+    it('exports movies as CSV', async () => {
+      const res = await request(app).get('/api/movies/export/csv');
+
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toMatch(/^text\/csv/);
+      expect(res.text).toContain('id,title,year,rating,genre,director');
+      expect(res.text).toContain('The Shawshank Redemption');
+    });
+  });
+
   describe('POST /api/movies', () => {
     it('creates a new movie', async () => {
       const res = await request(app)
