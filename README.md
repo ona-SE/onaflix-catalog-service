@@ -4,15 +4,15 @@ Movie catalog microservice for the OnaFlix platform. Manages movie data, genres,
 
 ## Stack
 
-- **Runtime:** Node.js 14
-- **Framework:** Express 4
-- **HTTP Client:** request-promise (deprecated)
+- **Runtime:** Node.js 20
+- **Framework:** Express 5
+- **HTTP Client:** Native Fetch API
 - **Utilities:** lodash
 
 ## Setup
 
 ```bash
-nvm use 14
+nvm use
 npm install
 npm run dev
 ```
